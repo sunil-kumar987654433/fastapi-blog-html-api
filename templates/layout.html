@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="{{url_for('static', path='assets/css/bootstrap5.3.8.min.css')}}" rel="stylesheet" >
+  {% block css %}
+  {% endblock css %}
+  <title>
+      {% block title %}
+      {% endblock title %}
+  </title>
+</head>
+
+<body>
+  {% include "navbar.html" %}
+  {% block content%}
+  {% endblock content %}
+  <script src="{{url_for('static', path='assets/js/bootstrap5.3.8.bundle.min.js')}}"></script>
+  {% block js%}
+  {% endblock js%}
+</body>
+</html>
