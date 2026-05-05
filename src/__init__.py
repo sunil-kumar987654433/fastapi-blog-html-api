@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
 from fastapi.staticfiles import StaticFiles
 from src.accounts.routs import account_router
 from fastapi.exceptions import RequestValidationError
@@ -36,12 +36,29 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     )
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
+
+    # extract readable errors
+    errors = []
+    for err in exc.errors():
+        field = ".".join(str(x) for x in err.get("loc", []))
+        message = err.get("msg", "")
+        errors.append(f"{field}: {message}")
+
+    # API response
+    if "/api" in request.url.path or "application/json" in request.headers.get("accept", ""):
+        return JSONResponse(
+            content={"detail": errors},
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT
+        )
+
+    # HTML response
     return templates.TemplateResponse(
         request=request,
         name="error.html",
         context={
             "request": request,
-            "message": str(exc) 
+            "message": "Invalid input",
+            "errors": errors   # 👈 list of errors
         },
         status_code=422
     )
