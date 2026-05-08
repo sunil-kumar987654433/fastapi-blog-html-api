@@ -1,0 +1,118 @@
+{% extends 'layout.html' %}
+
+{% block title %}
+FastAPI Blog | {{ title }}
+{% endblock title %}
+
+
+{% block css %}
+<link
+    href="{{ url_for('static', path='website/accounts/css/index.css') }}"
+    rel="stylesheet"
+    type="text/css"
+>
+{% endblock css %}
+
+
+{% block content %}
+
+<div class="container mt-4">
+
+    <!-- User Info -->
+    <div class="mb-4">
+        <h3>
+            Posts by:
+            <span class="text-primary">
+                {{ user.email }}
+            </span>
+        </h3>
+    </div>
+
+    <!-- Posts -->
+    {% for post in posts %}
+
+    <div class="card shadow-sm mb-4">
+
+        <div class="card-body">
+
+            <!-- Author -->
+            <div class="d-flex align-items-center mb-3">
+
+                <img
+                    src="{{ post.author.image_path }}"
+                    alt="{{ post.author.email }} profile picture"
+                    width="64"
+                    height="64"
+                    loading="lazy"
+                    class="rounded-circle border me-3 object-fit-cover"
+                >
+
+                <div>
+
+                    <a
+                        href="{{ url_for('user_posts', user_key=post.author.key) }}"
+                        class="text-decoration-none fw-bold"
+                    >
+                        {{ post.author.email }}
+                    </a>
+
+                    <br>
+
+                    <small class="text-muted">
+                        {{ post.date_posted }}
+                    </small>
+
+                </div>
+
+            </div>
+
+            <!-- Title -->
+            <h4>
+
+                <a
+                    href="{{ url_for('post-by-post-key', post_uuid=post.key) }}"
+                    class="text-decoration-none text-dark"
+                >
+                    {{ post.title }}
+                </a>
+
+            </h4>
+
+            <!-- Content -->
+            <p class="mt-3">
+
+                {% if post.content|length > 250 %}
+                    {{ post.content[:250] }}...
+                {% else %}
+                    {{ post.content }}
+                {% endif %}
+
+            </p>
+
+            <!-- Read More -->
+            <a
+                href="{{ url_for('post-by-post-key', post_uuid=post.key) }}"
+                class="btn btn-sm btn-primary"
+            >
+                Read More
+            </a>
+
+        </div>
+
+    </div>
+
+    {% else %}
+
+    <div class="alert alert-info text-center">
+        No posts available.
+    </div>
+
+    {% endfor %}
+
+</div>
+
+{% endblock content %}
+
+
+{% block js %}
+{% endblock js %}
