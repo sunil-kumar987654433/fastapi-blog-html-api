@@ -1,17 +1,32 @@
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, status, Depends
 from fastapi.staticfiles import StaticFiles
 from src.accounts.routs import account_router
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.templating import Jinja2Templates
+from typing import Annotated
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("start server...")
+    yield
+    print("stop server...")
+
+
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/media", StaticFiles(directory='media'), name='media')
 
-app.include_router(account_router, prefix="/account", tags=['account'])
+app.include_router(account_router, tags=['account'])
+
+
+
+
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
@@ -37,7 +52,6 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
 
-    # extract readable errors
     errors = []
     for err in exc.errors():
         field = ".".join(str(x) for x in err.get("loc", []))
@@ -51,14 +65,13 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT
         )
 
-    # HTML response
     return templates.TemplateResponse(
         request=request,
         name="error.html",
         context={
             "request": request,
             "message": "Invalid input",
-            "errors": errors   # 👈 list of errors
+            "errors": errors  
         },
         status_code=422
     )

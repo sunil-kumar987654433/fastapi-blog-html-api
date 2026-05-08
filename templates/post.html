@@ -1,0 +1,84 @@
+{% extends 'layout.html' %}
+
+{% block title %}
+FastAPI Blog | {{ title }}
+{% endblock title %}
+
+
+{% block css %}
+<link
+    href="{{ url_for('static', path='website/accounts/css/index.css') }}"
+    rel="stylesheet"
+    type="text/css"
+>
+{% endblock css %}
+
+
+{% block content %}
+
+<div class="container mt-4">
+
+    <div class="row justify-content-center">
+
+        <div class="col-lg-8">
+
+            <div class="card shadow-sm">
+
+                <div class="card-body">
+
+                    <!-- Author Info -->
+                    <div class="d-flex align-items-center mb-3">
+
+                        <img
+                            src="{{ post.author.image_path }}"
+                            alt="{{ post.author.email }} profile picture"
+                            width="64"
+                            height="64"
+                            loading="lazy"
+                            class="rounded-circle border me-3 object-fit-cover"
+                        >
+
+                        <div>
+
+                            <a
+                                href="{{ url_for('user_posts', user_key=post.author.key) }}"
+                                class="text-decoration-none fw-bold"
+                            >
+                                {{ post.author.email }}
+                            </a>
+
+                            <br>
+
+                            <small class="text-muted">
+                                {{ post.date_posted }}
+                            </small>
+
+                        </div>
+
+                    </div>
+
+                    <!-- Post Title -->
+                    <h2 class="mb-3">
+                        {{ post.title }}
+                    </h2>
+
+                    <!-- Post Content -->
+                    <p class="fs-5 lh-lg">
+                        {{ post.content }}
+                    </p>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock content %}
+
+
+{% block js %}
+{% endblock js %}
