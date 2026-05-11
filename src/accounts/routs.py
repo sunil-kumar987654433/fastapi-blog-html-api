@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Request, HTTPException, status, Depends, status
+from fastapi import APIRouter, Request, HTTPException, status, Depends, status, File, UploadFile, Form
 import uuid
 from fastapi.templating import Jinja2Templates
-from .schema import PostCreate, PostResponse
+from .schema import PostCreate, PostResponse, UserUpdate
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, insert, update
 from src.db.database import get_session
-from src.accounts.schema import UserCreate, UserResponse, PostCreate, PostResponse
+from src.accounts.schema import UserCreate, UserResponse, PostCreate, PostResponse, PostUpdate
 from typing import Annotated
 from .services import UserService, PostService
 from .models import User, Post
@@ -34,6 +34,30 @@ async def create_user(data: UserCreate, session: AsyncSession =  Depends(get_ses
     result = await user_service.CreateUser(data, session)
     return result
 
+@account_router.post("/api/users/{user_id}", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def update_a_user(user_id: uuid.UUID, email: str | None = Form(default=None), image_file: UploadFile | None = File(default=None),  session: AsyncSession =  Depends(get_session)):
+    """
+        update user
+    """
+
+    result = await user_service.UpdateUser(
+        user_id=user_id,
+        email=email,
+        image_file=image_file,
+        session=session
+    )
+    return result
+
+
+@account_router.get("/api/users", response_model=list[UserResponse], status_code=status.HTTP_200_OK)
+async def fetach_all_user(session: AsyncSession =  Depends(get_session)):
+    """
+        get all user
+    """
+   
+    return await user_service.get_all_users(session)
+    
+
 @account_router.post("/api/users/{user_uuid}", response_model=UserResponse, status_code=status.HTTP_200_OK)
 async def get_a_user(user_uuid: uuid.UUID, session: AsyncSession =  Depends(get_session)):
     """
@@ -43,7 +67,7 @@ async def get_a_user(user_uuid: uuid.UUID, session: AsyncSession =  Depends(get_
 
 
 @account_router.get("/api/posts", response_model=list[PostResponse], status_code=status.HTTP_200_OK)
-async def all_post(session:AsyncSession =  Depends(get_session)):
+async def fetch_all_post(session:AsyncSession =  Depends(get_session)):
     """
         fetch all post
     """
@@ -59,12 +83,6 @@ async def home(request: Request, session:AsyncSession = Depends(get_session)):
     statement = select(Post)
     result = await session.execute(statement)
     posts = result.scalars().fetchall()
-    print("==================")
-    print("==================")
-    print(posts)
-    print("==================")
-    print("==================")
-    print("==================")
 
     context = {
         "posts": posts,
@@ -137,6 +155,21 @@ async def user_post_page(user_uuid:uuid.UUID, session:AsyncSession =  Depends(ge
 async def create_post(data: PostCreate, session: AsyncSession = Depends(get_session)):
     return await post_service.CreatePost(data, session)
 
-@account_router.post("/api/posts/{post_uid}", status_code=status.HTTP_200_OK)
+@account_router.get("/api/posts/{post_uid}", status_code=status.HTTP_200_OK, response_model=PostResponse)
 async def fetch_post_by_post_uid(post_uid: uuid.UUID, session: AsyncSession = Depends(get_session)):
     return await post_service.fetch_post_by_uid(post_uid, session)
+
+
+@account_router.put("/api/posts/{post_uid}", status_code=status.HTTP_200_OK, response_model=PostResponse)
+async def update_post_full(post_uid: uuid.UUID, data: PostCreate, session: AsyncSession = Depends(get_session)):
+    return await post_service.full_update_post_by_uid(post_uid = post_uid, session=session, data=data)
+
+
+@account_router.patch("/api/posts/{post_uid}", status_code=status.HTTP_200_OK, response_model=PostResponse)
+async def update_post_patch(post_uid: uuid.UUID, data: PostUpdate, session: AsyncSession = Depends(get_session)):
+    return await post_service.update_post_patch(post_uid, data, session)
+
+
+@account_router.delete("/api/posts/{post_uid}", status_code=status.HTTP_204_NO_CONTENT)
+async def update_post_patch(post_uid: uuid.UUID, session: AsyncSession = Depends(get_session)):
+    return await post_service.delete_posts(post_uid, session)
