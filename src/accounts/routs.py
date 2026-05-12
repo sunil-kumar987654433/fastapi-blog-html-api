@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Request, HTTPException, status, Depends, status, File, UploadFile, Form
 import uuid
 from fastapi.templating import Jinja2Templates
+from pydantic import EmailStr
 from .schema import PostCreate, PostResponse, UserUpdate
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, insert, update
@@ -9,7 +10,7 @@ from src.accounts.schema import UserCreate, UserResponse, PostCreate, PostRespon
 from typing import Annotated
 from .services import UserService, PostService
 from .models import User, Post
-
+from sqlalchemy.orm import selectinload
 
 
 
@@ -35,7 +36,7 @@ async def create_user(data: UserCreate, session: AsyncSession =  Depends(get_ses
     return result
 
 @account_router.post("/api/users/{user_id}", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def update_a_user(user_id: uuid.UUID, email: str | None = Form(default=None), image_file: UploadFile | None = File(default=None),  session: AsyncSession =  Depends(get_session)):
+async def update_a_user(user_id: uuid.UUID, email: EmailStr | None = Form(default=None), image_file: UploadFile | None = File(default=None),  session: AsyncSession =  Depends(get_session)):
     """
         update user
     """
@@ -47,6 +48,13 @@ async def update_a_user(user_id: uuid.UUID, email: str | None = Form(default=Non
         session=session
     )
     return result
+
+@account_router.delete("/api/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_a_user(user_id: uuid.UUID,  session: AsyncSession =  Depends(get_session)):
+    """
+        delete user
+    """
+    return await user_service.delete_user(user_id,  session)
 
 
 @account_router.get("/api/users", response_model=list[UserResponse], status_code=status.HTTP_200_OK)
@@ -71,7 +79,7 @@ async def fetch_all_post(session:AsyncSession =  Depends(get_session)):
     """
         fetch all post
     """
-    statement = select(Post)
+    statement = select(Post).options(selectinload(Post.author))
     result = await session.execute(statement)
     return result.scalars().fetchall()
 
@@ -80,7 +88,8 @@ async def home(request: Request, session:AsyncSession = Depends(get_session)):
     """
         show all post
     """
-    statement = select(Post)
+    
+    statement = select(Post).options(selectinload(Post.author))
     result = await session.execute(statement)
     posts = result.scalars().fetchall()
 
@@ -100,7 +109,9 @@ async def post_by_key(request: Request, post_uuid:uuid.UUID, session:AsyncSessio
     """
         get particular post by uuid
     """
-    statement = select(Post).where(
+    statement = select(Post) \
+    .options(selectinload(Post.author)) \
+    .where(
         Post.key == post_uuid
     )
     result = await session.execute(statement)
@@ -122,11 +133,11 @@ async def post_by_key(request: Request, post_uuid:uuid.UUID, session:AsyncSessio
 
 
 @account_router.get("/users/{user_key}/posts", include_in_schema=False, name='user_posts')
-async def user_post_page(request: Request, user_uuid:uuid.UUID, session:AsyncSession =  Depends(get_session)):
+async def user_post_page(request: Request, user_key:uuid.UUID, session:AsyncSession =  Depends(get_session)):
     """
         particular post of user
     """
-    result = await user_service.all_post_by_user(session=session, key=user_uuid)
+    result = await user_service.all_post_by_user(session=session, key=user_key)
     posts  =  result.get("posts")
     user = result.get("user")
     context = {
@@ -145,7 +156,6 @@ async def user_post_page(user_uuid:uuid.UUID, session:AsyncSession =  Depends(ge
     """
         all post of user
     """
-    print("user_uuid----", user_uuid)
     result = await user_service.all_post_by_user(session=session, key=user_uuid)
     posts = result.get("posts")
     return posts

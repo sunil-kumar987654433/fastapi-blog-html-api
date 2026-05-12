@@ -32,8 +32,14 @@ Fatapi-blog | {{title}}
                     height="65"
                     loading="lazy"
                     >
-                    <a href="{{ url_for('post_detail', post_uuid=post.key) }}">
+                    <!-- <a href="{{ url_for('post_detail', post_uuid=post.key) }}">
                       {{ post.author.email }}
+                    </a> -->
+                    <a
+                        href="{{ url_for('user_posts', user_key=post.author.key) }}"
+                        class="text-decoration-none fw-bold"
+                    >
+                        {{ post.author.email }}
                     </a>
                     <small>{{post.date_posted}}</small>
                     

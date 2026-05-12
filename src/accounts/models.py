@@ -44,8 +44,8 @@ class User(Base):
     
     posts: Mapped[list['Post']] = relationship(
         back_populates='author',
-        lazy='selectin'
-        # cascade='all, delete-orphan'
+        lazy='raise',
+        cascade='all, delete-orphan'
         )
     
     def __repr__(self):
@@ -74,4 +74,4 @@ class Post(Base):
         onupdate=lambda: datetime.now(timezone.utc)
     )
 
-    author: Mapped['User'] = relationship(back_populates='posts', lazy="selectin")
+    author: Mapped['User'] = relationship(back_populates='posts', lazy="raise")

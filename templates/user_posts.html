@@ -70,7 +70,7 @@ FastAPI Blog | {{ title }}
             <h4>
 
                 <a
-                    href="{{ url_for('post-by-post-key', post_uuid=post.key) }}"
+                    href="{{ url_for('post_detail', post_uuid=post.key) }}"
                     class="text-decoration-none text-dark"
                 >
                     {{ post.title }}
@@ -91,7 +91,7 @@ FastAPI Blog | {{ title }}
 
             <!-- Read More -->
             <a
-                href="{{ url_for('post-by-post-key', post_uuid=post.key) }}"
+                href="{{ url_for('post_detail', post_uuid=post.key) }}"
                 class="btn btn-sm btn-primary"
             >
                 Read More
