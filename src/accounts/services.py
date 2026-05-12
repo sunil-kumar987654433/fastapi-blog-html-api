@@ -11,14 +11,28 @@ from pydantic import EmailStr
 from starlette.exceptions import HTTPException
 from fastapi import Depends, File, Form, status
 import uuid
+from sqlalchemy.orm import selectinload
 class UserService:
     async def get_all_users(self, session: AsyncSession):
         user = select(User)
         result = await session.execute(user)
         return result.scalars().all()
+    
+    async def fetch_user_by_email_or_uuid_with_post(self, session: AsyncSession, email: EmailStr | None = None, key: uuid.UUID | None = None):
+        statement  = select(User) \
+            .options(selectinload(User.posts).selectinload(Post.author)) \
+            .where(
+            or_(
+            User.email == email,
+            User.key == key
+            )
+        )
+        result = await session.execute(statement)
+        return result.scalar_one_or_none()
 
     async def fetch_user_by_email_or_uuid(self, session: AsyncSession, email: EmailStr | None = None, key: uuid.UUID | None = None):
-        statement  = select(User).where(
+        statement  = select(User) \
+            .where(
             or_(
             User.email == email,
             User.key == key
@@ -29,7 +43,7 @@ class UserService:
     
     async def all_post_by_user(self, session: AsyncSession, key: uuid.UUID):
         try:
-            user = await self.fetch_user_by_email_or_uuid(session=session, key=key)
+            user = await self.fetch_user_by_email_or_uuid_with_post(session=session, key=key)
             if user is None:
                 raise HTTPException(
                     detail="user not exist",
@@ -68,7 +82,7 @@ class UserService:
         await session.refresh(user)
         return user
     
-    async def UpdateUser(self, user_id: uuid.UUID, email: str | None = None, image_file: str | None = None,  session: AsyncSession = Depends(get_session)):
+    async def UpdateUser(self, user_id: uuid.UUID, email: EmailStr | None = None, image_file: str | None = None,  session: AsyncSession = Depends(get_session)):
         user = await self.fetch_user_by_email_or_uuid(session=session, key=user_id)
         if not user:
             raise HTTPException(
@@ -117,6 +131,33 @@ class UserService:
         await session.commit()
         await session.refresh(user)
         return user
+    
+    async def delete_user(self, user_id: uuid.UUID,  session: AsyncSession):
+        user = await self.fetch_user_by_email_or_uuid(session=session, key=user_id)
+        if user is None:
+            raise HTTPException(
+                detail="user not exist",
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+ 
+        try:
+            await session.delete(user)
+            
+            media_dir = 'media/profile_pics'
+            if user.image_file:
+                image_path = os.path.join(
+                    media_dir,
+                    user.image_file
+                )
+                if os.path.exists(image_path):
+                    os.remove(image_path)
+            await session.commit()
+        except Exception as e:
+            raise HTTPException(
+                detail=f"error: {e}",
+                status_code=status.HTTP_403_FORBIDDEN
+            )
+
 
 
     async def GetAUser(self, user_uuid: uuid.UUID, session: AsyncSession):
@@ -158,7 +199,7 @@ class PostService:
         )
         session.add(post)
         await session.commit()
-        await session.refresh(post)
+        await session.refresh(post, attribute_names=['author'])
         return post
     
     async def full_update_post_by_uid(self, post_uid: uuid.UUID, data: PostCreate, session: AsyncSession ):
@@ -169,7 +210,7 @@ class PostService:
             setattr(post, key, value)
         
         await session.commit()
-        await session.refresh(post)
+        await session.refresh(post, attribute_names=['author'])
         return post
     
 

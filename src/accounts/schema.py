@@ -48,6 +48,7 @@ class PostUpdate(BaseModel):
     content: str | None = None
     user_id: uuid.UUID
 
+
 class PostResponse(PostBase):
     id: int | None = None
     key: uuid.UUID
@@ -55,3 +56,5 @@ class PostResponse(PostBase):
     date_posted: date
     author: UserResponse 
     model_config = ConfigDict(from_attributes=True)
+
+    

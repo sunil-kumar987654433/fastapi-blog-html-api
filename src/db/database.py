@@ -8,7 +8,8 @@ from typing import AsyncGenerator
 
 engine = create_async_engine(
     url=DATABASE_URL,
-    echo=True
+    echo=True,
+    pool_pre_ping=True
 )
 
 async def init_db():
@@ -23,4 +24,7 @@ async_session = async_sessionmaker(
 
 async def get_session()->AsyncGenerator[AsyncSession, None]:
     async with async_session() as session:
-        yield session
+        try:
+            yield session
+        finally:
+            await session.close()
