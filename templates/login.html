@@ -1,0 +1,88 @@
+{% extends 'layout.html' %}
+
+{% block title %}
+Login
+{% endblock title %}
+
+{% block content %}
+
+<div class="container py-5">
+
+    <div class="row justify-content-center">
+
+        <div class="col-md-6 col-lg-5">
+
+            <div class="card shadow border-0">
+
+                <div class="card-body p-4">
+
+                    <h2 class="text-center mb-4">
+                        Login
+                    </h2>
+
+                    <form id="loginForm">
+
+                        <!-- Email -->
+                        <div class="mb-3">
+
+                            <label class="form-label">
+                                Email
+                            </label>
+
+                            <input type="email" id="email" class="form-control" placeholder="Enter email" required>
+
+                        </div>
+
+                        <!-- Password -->
+                        <div class="mb-3">
+
+                            <label class="form-label">
+                                Password
+                            </label>
+
+                            <input type="password" id="password" class="form-control" placeholder="Enter password"
+                                required>
+
+                        </div>
+
+                        <!-- Button -->
+                        <button type="submit" class="btn btn-primary w-100">
+                            Login
+                        </button>
+
+                    </form>
+                    <!-- Register -->
+                    <div class="text-center mt-4">
+
+                        <small>
+                            Don't have an account?
+                        </small>
+
+                        <a href="{{url_for('register-user-form')}}">
+                            Register
+                        </a>
+
+                    </div>
+
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock content %}
+
+{% block js %}
+<script>
+    const LOGIN_URL = "{{url_for('get-token-url')}}"
+    const HOME_PAGE = "{{url_for('home')}}"
+
+</script>
+<script src="{{ url_for('static', path='website/accounts/js/login.js')}}"></script>
+
+{% endblock js %}

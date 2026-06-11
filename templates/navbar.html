@@ -1,21 +1,14 @@
-<nav class="navbar navbar-expand-lg bg-body-tertiary">
-  <div class="container-fluid">
+<nav class="navbar navbar-expand-lg bg-body-tertiary shadow-sm">
+  <div class="container">
 
     <!-- Logo -->
-    <a class="navbar-brand" href="{{ url_for('home') }}">
+    <a class="navbar-brand fw-bold" href="{{ url_for('home') }}">
       MyBlog
     </a>
 
     <!-- Mobile Toggle -->
-    <button
-      class="navbar-toggler"
-      type="button"
-      data-bs-toggle="collapse"
-      data-bs-target="#navbarSupportedContent"
-      aria-controls="navbarSupportedContent"
-      aria-expanded="false"
-      aria-label="Toggle navigation"
-    >
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent"
+      aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>
     </button>
 
@@ -25,99 +18,117 @@
       <!-- Left Menu -->
       <ul class="navbar-nav me-auto mb-2 mb-lg-0">
 
+        <!-- Home -->
         <li class="nav-item">
           <a class="nav-link active" href="{{ url_for('home') }}">
             Home
           </a>
         </li>
 
+        <!-- New Post -->
+        <li id="newPostNavItem" class="nav-item d-none">
 
-        <li class="nav-item">
-          <a class="nav-link" href="#">
-            Create Post
-          </a>
+          <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#postModal">
+            New Post
+          </button>
+
         </li>
-
-  
-        
 
       </ul>
 
       <!-- Search -->
-      <form class="d-flex me-3" role="search" method="get" action="#">
-        <input
-          class="form-control me-2"
-          type="search"
-          name="q"
-          placeholder="Search"
-          aria-label="Search"
-        >
+      <form class="d-flex my-3 my-lg-0 me-lg-3" role="search" method="get" action="#">
+
+        <input class="form-control me-2" type="search" name="q" placeholder="Search posts..." aria-label="Search">
+
         <button class="btn btn-outline-success" type="submit">
           Search
         </button>
+
       </form>
 
-      <!-- Right Side -->
-      <ul class="navbar-nav mb-2 mb-lg-0">
+      <ul class="navbar-nav mb-2 mb-lg-0 align-items-lg-center">
+
+        <!-- Guest Navbar -->
+        <li id="guestNavbar" class="nav-item">
+
+          <div class="d-flex gap-2">
+
+            <a class="btn btn-outline-primary btn-sm" href="{{ url_for('login-user-form') }}">
+              Login
+            </a>
+
+            <a class="btn btn-primary btn-sm" href="{{ url_for('register-user-form') }}">
+              Register
+            </a>
+
+          </div>
+
+        </li>
 
 
-        <!-- User Dropdown -->
-        <li class="nav-item dropdown">
 
-          <a
-            class="nav-link dropdown-toggle d-flex align-items-center gap-2"
-            href="#"
-            role="button"
-            data-bs-toggle="dropdown"
-            aria-expanded="false"
-          >
+        <!-- Auth Navbar -->
+        <li id="authNavbar" class="nav-item dropdown d-none">
+
+          <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#" role="button"
+            data-bs-toggle="dropdown" aria-expanded="false">
 
             <!-- User Image -->
-            <img
-              src="{{url_for('static', path='profile_pics/default.jpg')}}"
-              alt="profile"
-              width="35"
-              height="35"
-              class="rounded-circle object-fit-cover border"
-            >
+            <img id="navbarUserImage" alt="profile"
+              width="38" height="38" class="rounded-circle object-fit-cover border">
 
-            <!-- Email -->
-            <span>
-            </span>
 
+              
           </a>
 
+          <!-- Dropdown -->
           <ul class="dropdown-menu dropdown-menu-end">
 
             <li>
-              <a class="dropdown-item" href="#">
+
+              <a class="dropdown-item" href="{{url_for('user-profile')}}">
                 Profile
               </a>
+
             </li>
 
             <li>
+
               <a class="dropdown-item" href="#">
                 My Posts
               </a>
+
             </li>
 
-            <li><hr class="dropdown-divider"></li>
+            <li>
+
+              <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#postModal">
+                New Post
+              </button>
+
+            </li>
 
             <li>
-              <a class="dropdown-item text-danger" href="#">
+              <hr class="dropdown-divider">
+            </li>
+
+            <li>
+
+              <button id="logoutBtn" class="dropdown-item text-danger">
                 Logout
-              </a>
+              </button>
+
             </li>
 
           </ul>
 
         </li>
 
-
-
-
       </ul>
 
     </div>
+
   </div>
 </nav>
+{% include 'save-post.html' %}

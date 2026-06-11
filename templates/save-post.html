@@ -1,0 +1,101 @@
+<div
+    class="modal fade"
+    id="postModal"
+    tabindex="-1"
+    aria-hidden="true"
+>
+
+    <div class="modal-dialog">
+
+        <div class="modal-content">
+
+            <!-- Header -->
+            <div class="modal-header">
+
+                <h5 class="modal-title">
+                    Create Post
+                </h5>
+
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="modal"
+                ></button>
+
+            </div>
+
+            <!-- Body -->
+            <div class="modal-body">
+
+                <form id="postForm">
+
+                    <!-- Title -->
+                    <div class="mb-3">
+
+                        <label class="form-label">
+                            Title
+                        </label>
+
+                        <input
+                            type="text"
+                            class="form-control"
+                            id="title"
+                            required
+                        >
+
+                    </div>
+                    <!-- <div class="mb-3">
+
+                        <label class="form-label">
+                            Date Posted
+                        </label>
+
+                        <input
+                            type="date"
+                            class="form-control"
+                            id="date_posted"
+                            required
+                        >
+
+                    </div> -->
+
+                    <!-- Content -->
+                    <div class="mb-3">
+
+                        <label class="form-label">
+                            Content
+                        </label>
+
+                        <textarea
+                            class="form-control"
+                            id="content"
+                            rows="5"
+                            required
+                        ></textarea>
+
+                    </div>
+
+                    <button
+                        type="submit"
+                        class="btn btn-primary"
+                    >
+                        Save Post
+                    </button>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+<script>
+    const CREATE_POST_URL = "{{url_for('create-post')}}"
+    console.log("CREATE_POST_URL====", CREATE_POST_URL)
+
+    
+</script>
+
+<script src="{{ url_for('static', path='website/accounts/js/home.js')}}"></script> 

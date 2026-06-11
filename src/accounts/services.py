@@ -1,17 +1,23 @@
 import os
-
+import io
+import boto3
+from starlette.concurrency import run_in_threadpool
+from PIL import Image, ImageOps
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, insert, update, text, or_
-
+from sqlalchemy import select, insert, update, text, or_, func
+from botocore.exceptions import NoCredentialsError, ClientError
 from src.db.database import get_session
-from .models import User, Post
-from src.accounts.schema import UserCreate, PostCreate, PostUpdate, UserUpdate
-from .utils import password_service
+from src.accounts.models import User
+from src.post_app.models import Post
+from src.accounts.schema import UserCreate, UserLogin, UserUpdate
+from .utils import password_service, create_access_token, create_refresh_token
 from pydantic import EmailStr
 from starlette.exceptions import HTTPException
-from fastapi import Depends, File, Form, status
+from fastapi import Depends, File, Form, UploadFile, status
 import uuid
 from sqlalchemy.orm import selectinload
+from src.config import Config
+
 class UserService:
     async def get_all_users(self, session: AsyncSession):
         user = select(User)
@@ -23,7 +29,7 @@ class UserService:
             .options(selectinload(User.posts).selectinload(Post.author)) \
             .where(
             or_(
-            User.email == email,
+            User.email == email.lower() if email else False,
             User.key == key
             )
         )
@@ -34,12 +40,42 @@ class UserService:
         statement  = select(User) \
             .where(
             or_(
-            User.email == email,
+            User.email == email.lower() if email else False,
             User.key == key
             )
         )
         result = await session.execute(statement)
         return result.scalar_one_or_none()
+    
+    async def create_login_user(self, data: UserLogin, session: AsyncSession):
+        """
+            signin user
+        """
+        user = await self.fetch_user_by_email_or_uuid(session=session, email=data.email)
+        if user is None:
+                raise HTTPException(
+                    detail="user not exist",
+                    status_code=status.HTTP_404_NOT_FOUND
+                )
+        if user.is_active is False:
+            raise HTTPException(
+                detail="Inactive user.",
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+        if not password_service.verify_password(data.password, user.hashed_password):
+            raise HTTPException(
+                detail="Invalid password",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        access_token = create_access_token(user=user)
+        refresh_token = create_refresh_token(user=user)
+        return {
+            "access_token_detail": access_token,
+            "refresh_token_detail": refresh_token,
+        }
+        
+        
     
     async def all_post_by_user(self, session: AsyncSession, key: uuid.UUID):
         try:
@@ -74,7 +110,7 @@ class UserService:
                 status_code=status.HTTP_400_BAD_REQUEST
             )
         user  = User(
-            email=data.email,
+            email=data.email.lower(),
             hashed_password=password_service.create_password(data.password1)
         )
         session.add(user)
@@ -118,11 +154,11 @@ class UserService:
                     base_image_dir,
                     user.image_file
                 )
-                print("old_path=====", old_path)
+                
                 if os.path.exists(
                     old_path
                 ):
-                    print("is old_path=====", old_path)
+                  
                     os.remove(old_path)
             #save file
             user.image_file = filename
@@ -169,60 +205,78 @@ class UserService:
             )
         return user
     
-class PostService:
-    async def fetch_post_by_uid(self, post_uid: uuid.UUID, session: AsyncSession):
-        statament = select(Post).where(Post.key == post_uid)
-        result = await session.execute(statament)
-        post =  result.scalar_one_or_none()
-        if post is None:
-            raise HTTPException(
-                detail="post not exist",
-                status_code=status.HTTP_404_NOT_FOUND
-            )
-        return post
-    
 
-    async def CreatePost(self, data: PostCreate, session: AsyncSession):
-        user =await UserService().fetch_user_by_email_or_uuid(session=session, key=data.user_id)
-        if user is None:
-            raise HTTPException(
-                detail="user not exist",
-                status_code=status.HTTP_404_NOT_FOUND
-            )
-        if user.is_active is False:
-            raise HTTPException(
-                detail="Inactive user.",
-                status_code=status.HTTP_404_NOT_FOUND
-            )
-        post = Post(
-            **(data.model_dump())
+    
+    def _get_s3_client(self):
+        return boto3.client(
+            's3', 
+            region_name=Config.AWS_REGION,
+            aws_access_key_id=Config.AWS_S3_ACCESS_KEY.get_secret_value(),
+            aws_secret_access_key=Config.AWS_S3_SECRET_KEY.get_secret_value(),
+            endpoint_url=Config.S3_ENDPOINT_URL
         )
-        session.add(post)
-        await session.commit()
-        await session.refresh(post, attribute_names=['author'])
-        return post
     
-    async def full_update_post_by_uid(self, post_uid: uuid.UUID, data: PostCreate, session: AsyncSession ):
-        post = await self.fetch_post_by_uid(post_uid=post_uid, session=session)
-        
-        
-        for key , value in data.model_dump(exclude_unset=True).items():
-            setattr(post, key, value)
-        
-        await session.commit()
-        await session.refresh(post, attribute_names=['author'])
-        return post
-    
+    async def UpdateUser_form(
+        self,
+        current_user,
+        image_file: UploadFile = File(...),
+        session: AsyncSession = Depends(get_session)
+    ):
+        if not image_file.content_type.startswith("image/"):
+            raise HTTPException(
+                detail="File must be an Image",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            s3_client = self._get_s3_client()
 
-    async def update_post_patch(self,post_uid: uuid.UUID, data: PostUpdate, session: AsyncSession):
-        post =await self.fetch_post_by_uid(post_uid=post_uid, session=session)
-        for k, v in data.model_dump(exclude_unset=True).items():
-            setattr(post, k,v)
-        await session.commit()
-        await session.refresh(post)
-        return post
-    
-    async def delete_posts(self, post_uid: uuid.UUID, session: AsyncSession):
-        post =await self.fetch_post_by_uid(post_uid=post_uid, session=session)
-        await session.delete(instance=post)
-        await session.commit()
+            # 1. इमेज डेटा को रीड करें और Pillow में लोड करें
+            file_bytes = await image_file.read()
+            image = Image.open(io.BytesIO(file_bytes))
+            
+            # 2. EXIF के आधार पर इमेज का ओरिएंटेशन सीधा (Rotate) करें
+            corrected_image = ImageOps.exif_transpose(image)
+            
+            # 3. सीधी की हुई इमेज को नए मेमोरी बफर (BytesIO) में सेव करें
+            in_memory_file = io.BytesIO()
+            file_format = image.format if image.format else "JPEG"
+            corrected_image.save(in_memory_file, format=file_format)
+            in_memory_file.seek(0) # पॉइंटर को वापस 0 पर लाएं ताकि S3 इसे पढ़ सके
+
+            # 4. यूनिक नाम और S3 की (Path) तैयार करें
+            ext = image_file.filename.split(".")[-1]
+            file_name = f"{uuid.uuid4()}.{ext}"
+            s3_object_key = f"profile_pics/{file_name}"
+            
+            # 5. बहुत ज़रूरी सुधार: यहाँ image_file.file की जगह 'in_memory_file' अपलोड करें 
+            s3_client.upload_fileobj(
+                in_memory_file,  # <-- यह बदलाव सबसे ज़रूरी था
+                Config.AWS_BUCKET_NAME,
+                s3_object_key,
+                ExtraArgs={
+                    "ContentType": image_file.content_type 
+                }
+            )
+            
+            # 6. पुरानी प्रोफाइल इमेज को S3 से डिलीट करें
+            if current_user.image_file:
+                try:
+                    old_s3_key = f"profile_pics/{current_user.image_file}"
+                    s3_client.delete_object(
+                        Bucket=Config.AWS_BUCKET_NAME,
+                        Key=old_s3_key
+                    )
+                except Exception as e:
+                    print(f"Old file delete failed: {e}") 
+                    
+            # 7. डेटाबेस में रिकॉर्ड सेव करें
+            current_user.image_file = file_name
+            session.add(current_user)
+            await session.commit()
+            await session.refresh(current_user)
+            
+            return current_user
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            image_file.file.close()
