@@ -2,9 +2,16 @@
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import DateTime, ForeignKey, Date, Integer, String, Boolean, Text, Enum as SAEnum, UUID
 import uuid
+from src.config import Config
 from src.db.base import Base
 from datetime import datetime, timedelta, timezone, UTC, date
 from enum import Enum
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.post_app.models import Post
+
 
 class UserRole(Enum):
     admin = 'admin'
@@ -36,11 +43,22 @@ class User(Base):
         nullable=True, default=None
     )
 
+    # @property
+    # def image_path(self):
+    #     if self.image_file:
+    #         return f'/media/profile_pics/{self.image_file}'
+    #     return f'/static/profile_pics/default.jpg'
+
     @property
     def image_path(self):
+
         if self.image_file:
-            return f'/media/profile_pics/{self.image_file}'
-        return f'/static/profile_pics/default.jpg'
+            return f"https://{Config.AWS_BUCKET_NAME}.s3.{Config.AWS_REGION}.amazonaws.com/profile_pics/{self.image_file}"
+            # https://fastapi-blog-uploads-linus.s3.ap-south-1.amazonaws.com/profile_pics/Screenshot_2026-05-26_17-20-24.png-d042852d-ccec-4735-905b-c118e14fa2a2.png                                    
+            # https://fastapi-blog-uploads-linus.s3.ap-south-1.amazonaws.com/profile_pics/c0a8ac5e-caa1-47e0-8bbd-fceabd5f9be9.png
+        return "/static/profile_pics/default.jpg"
+
+
     
     posts: Mapped[list['Post']] = relationship(
         back_populates='author',
@@ -51,27 +69,3 @@ class User(Base):
     def __repr__(self):
         return f"<User (id: {self.id}), (email: {self.email})>"
     
-class Post(Base):
-    __tablename__ = 'account_posts'
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    key: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), unique=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey(
-            "account_users.key", 
-            # ondelete='CASCADE'
-            ), 
-            nullable=False, index=True)
-    title: Mapped[str] = mapped_column(String(200), nullable=False)
-    content: Mapped[str]  = mapped_column(Text, nullable=False)
-    date_posted: Mapped[date] = mapped_column(Date)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc)
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc)
-    )
-
-    author: Mapped['User'] = relationship(back_populates='posts', lazy="raise")

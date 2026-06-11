@@ -18,7 +18,7 @@ class UserUpdate(UserBase):
 class UserResponse(UserBase):
     id: int
     key: uuid.UUID
-    hashed_password: str
+    # hashed_password: str
     is_active: bool
     is_superuser: bool
     is_verified: bool
@@ -33,28 +33,14 @@ class UserResponse(UserBase):
     )
 
 
-
-class PostBase(BaseModel):
-    title: str = Field(min_length=1, max_length=100)
-    content: str= Field(min_length=1)
-    
-
-class PostCreate(PostBase):
-    user_id: uuid.UUID
-    date_posted: date
-
-class PostUpdate(BaseModel):
-    title: str | None = None
-    content: str | None = None
-    user_id: uuid.UUID
+class UserLogin(BaseModel):
+    email: EmailStr 
+    password: str
 
 
-class PostResponse(PostBase):
-    id: int | None = None
-    key: uuid.UUID
-    user_id: uuid.UUID
-    date_posted: date
-    author: UserResponse 
-    model_config = ConfigDict(from_attributes=True)
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
 
     

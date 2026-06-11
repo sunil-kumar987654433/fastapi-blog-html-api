@@ -1,35 +1,40 @@
 from fastapi import FastAPI, Request, status, Depends
 from fastapi.staticfiles import StaticFiles
-from src.accounts.routs import account_router
+from src.accounts.routs import account_router, account_html_router
+from src.post_app.routes import post_router, post_html_router
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.templating import Jinja2Templates
-from typing import Annotated
 from contextlib import asynccontextmanager
 from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
-from sqlalchemy.orm import selectinload
 from src.db.database import engine
-from src.db.database import init_db
-
+from src.db.redis import redis_client
+from .middleware import register_middleware
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # await init_db()
     print("start server...")
     yield
     engine.dispose()
+    await redis_client.aclose()
     print("stop server...")
 
 
 
 
 app = FastAPI()
+register_middleware(app)
 templates = Jinja2Templates(directory="templates")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/media", StaticFiles(directory='media'), name='media')
 
-app.include_router(account_router, tags=['account'])
+app.include_router(account_router, tags=['account'], prefix='/api/users')
+app.include_router(account_html_router, tags=['account'], prefix='/users')
+
+app.include_router(post_router, tags=['post'], prefix='/api/posts')
+app.include_router(post_html_router, tags=['post'])
+
 
 
 @app.exception_handler(StarletteHTTPException)

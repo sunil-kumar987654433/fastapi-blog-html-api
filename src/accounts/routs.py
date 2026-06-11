@@ -1,28 +1,34 @@
-from fastapi import APIRouter, Request, HTTPException, status, Depends, status, File, UploadFile, Form
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Request, HTTPException, status, Depends, status, File, UploadFile, Form, Cookie
 import uuid
 from fastapi.templating import Jinja2Templates
 from pydantic import EmailStr
-from .schema import PostCreate, PostResponse, UserUpdate
+from fastapi.responses import JSONResponse
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, insert, update
+from src.accounts.utils import JWT_TOKEN, create_access_token, decode_token
 from src.db.database import get_session
-from src.accounts.schema import UserCreate, UserResponse, PostCreate, PostResponse, PostUpdate
+from src.accounts.schema import UserCreate, UserResponse, UserLogin, Token
 from typing import Annotated
-from .services import UserService, PostService
-from .models import User, Post
+
+from src.db.redis import add_jti_to_blocklist
+from .services import UserService
+from src.accounts.models import User
 from sqlalchemy.orm import selectinload
+from sqlalchemy import func
 
-
+from .dependancy import AccessTokenBearer, RefreshTokenBearer
 
 user_service = UserService()
-post_service = PostService()
-
 account_router = APIRouter()
+account_html_router = APIRouter()
+access_token_bearer = AccessTokenBearer()
+
 templates = Jinja2Templates(directory="templates")
 
-
-
-@account_router.post("/api/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@account_router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED, name="register-new-user")
 async def create_user(data: UserCreate, session: AsyncSession =  Depends(get_session)):
     """
         create user
@@ -35,7 +41,106 @@ async def create_user(data: UserCreate, session: AsyncSession =  Depends(get_ses
     result = await user_service.CreateUser(data, session)
     return result
 
-@account_router.post("/api/users/{user_id}", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@account_html_router.get("/register-user/", include_in_schema=False, name="register-user-form")
+async def create_user_form(request: Request, session:AsyncSession =  Depends(get_session)):
+    """
+    login user form
+    """
+    context = {}
+    return templates.TemplateResponse(
+        request=request,
+        name="register_user.html",
+        context=context
+    )
+
+
+@account_router.post("/token-normal", name="get-token-url")
+async def login_user(data: UserLogin, session: AsyncSession = Depends(get_session)):
+    result = await user_service.create_login_user(data, session)
+    max_age_refresh = str(int((result.get("refresh_token_detail")['expired_at'] - datetime.now(timezone.utc) ).total_seconds()))
+    max_age_access = str(int((result.get("access_token_detail")['expired_at'] - datetime.now(timezone.utc) ).total_seconds()))
+
+    response = JSONResponse(
+        content={
+            "access_token": result.get("access_token_detail")['access_token'],
+            "access_token_expired": result.get("access_token_detail")['expired_time_indian'].isoformat(),
+        }
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=result.get("refresh_token_detail")['refresh_token'],
+        max_age=max_age_refresh,
+        secure=True,
+        httponly=True,
+        samesite="lax"
+    )
+    response.set_cookie(
+        key="access_token",
+        value=result.get("access_token_detail")['access_token'],
+        max_age=max_age_access,
+        secure=True,
+        httponly=True,
+        samesite="lax"
+    )
+    return response
+
+async def get_current_user( session: AsyncSession = Depends(get_session), user_detail=Depends(access_token_bearer)):
+    user_uid = user_detail.get("user")['sub']
+    user = await user_service.fetch_user_by_email_or_uuid(key=user_uid, session=session)
+    return user
+
+
+
+
+
+async def get_current_user_optional(
+    request: Request,
+    session: AsyncSession = Depends(get_session)
+):
+    
+
+    try:
+        token = request.cookies.get(
+            "access_token"
+        )
+
+        if decode_token(token) is False:
+            return None
+        payload = JWT_TOKEN().decode_data(token)
+        user_uid = payload.get("user")["sub"]
+        
+        user = await user_service.fetch_user_by_email_or_uuid(session=session, key=user_uid)
+        return user
+
+    except Exception as e:
+        print(e)
+        return None
+    
+
+
+@account_router.get("/me")
+async def current_user(
+    request: Request
+):
+    current_user = request.state.user if request.state.user else None
+    return UserResponse.model_validate(
+        current_user
+    )
+
+
+@account_html_router.get("/login/", include_in_schema=False, name="login-user-form")
+async def create_user_form(request: Request, session:AsyncSession =  Depends(get_session)):
+    """
+    login user form
+    """
+    context = {}
+    return templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context=context
+    )
+
+@account_router.post("/{user_id}", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def update_a_user(user_id: uuid.UUID, email: EmailStr | None = Form(default=None), image_file: UploadFile | None = File(default=None),  session: AsyncSession =  Depends(get_session)):
     """
         update user
@@ -49,7 +154,61 @@ async def update_a_user(user_id: uuid.UUID, email: EmailStr | None = Form(defaul
     )
     return result
 
-@account_router.delete("/api/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+
+@account_html_router.patch("/upload-profile-image", name="update-user-image")
+async def update_user_image(
+    request: Request,
+    image_file: UploadFile | None = File(default=None),  
+    session: AsyncSession =  Depends(get_session)
+    ):
+    """
+        update user for html
+    """
+    current_user = request.state.user
+    if not current_user:
+            raise HTTPException(
+                detail="user not exist",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+    # fetch again in THIS session
+    db_user = await user_service.fetch_user_by_email_or_uuid(
+        session=session,
+        key=current_user.key
+    )
+
+    result = await user_service.UpdateUser_form(
+        db_user,
+        image_file,
+        session,
+    )
+
+
+    return UserResponse.model_validate(current_user)
+
+@account_html_router.get("/user-profile", name="user-profile")
+async def user_profile(request: Request, session: AsyncSession =  Depends(get_session)):
+    """
+        user profile
+    """
+   
+    if not request.state.user and request.state.user is None:
+            raise HTTPException(
+                detail="this user already exist",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+    context = {
+        "user": request.state.user,
+        "title": 'user profile'
+    }
+
+    return templates.TemplateResponse(
+        request=request,
+        name="user-profile.html",
+        context=context
+    )
+
+@account_router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_a_user(user_id: uuid.UUID,  session: AsyncSession =  Depends(get_session)):
     """
         delete user
@@ -57,7 +216,7 @@ async def delete_a_user(user_id: uuid.UUID,  session: AsyncSession =  Depends(ge
     return await user_service.delete_user(user_id,  session)
 
 
-@account_router.get("/api/users", response_model=list[UserResponse], status_code=status.HTTP_200_OK)
+@account_router.get("/", response_model=list[UserResponse], status_code=status.HTTP_200_OK)
 async def fetach_all_user(session: AsyncSession =  Depends(get_session)):
     """
         get all user
@@ -66,7 +225,7 @@ async def fetach_all_user(session: AsyncSession =  Depends(get_session)):
     return await user_service.get_all_users(session)
     
 
-@account_router.post("/api/users/{user_uuid}", response_model=UserResponse, status_code=status.HTTP_200_OK)
+@account_router.post("/{user_uuid}", response_model=UserResponse, status_code=status.HTTP_200_OK)
 async def get_a_user(user_uuid: uuid.UUID, session: AsyncSession =  Depends(get_session)):
     """
         get any user by email or user uuid
@@ -74,65 +233,12 @@ async def get_a_user(user_uuid: uuid.UUID, session: AsyncSession =  Depends(get_
     return await user_service.GetAUser(user_uuid, session)
 
 
-@account_router.get("/api/posts", response_model=list[PostResponse], status_code=status.HTTP_200_OK)
-async def fetch_all_post(session:AsyncSession =  Depends(get_session)):
-    """
-        fetch all post
-    """
-    statement = select(Post).options(selectinload(Post.author))
-    result = await session.execute(statement)
-    return result.scalars().fetchall()
-
-@account_router.get("/", include_in_schema=False, name="home")
-async def home(request: Request, session:AsyncSession = Depends(get_session)):
-    """
-        show all post
-    """
-    
-    statement = select(Post).options(selectinload(Post.author))
-    result = await session.execute(statement)
-    posts = result.scalars().fetchall()
-
-    context = {
-        "posts": posts,
-        "title": 'Home'
-    }
-    return templates.TemplateResponse(
-        request=request,
-        name="home.html",
-        context=context
-    )
 
 
-@account_router.get("/posts/{post_uuid}", include_in_schema=False, name="post_detail")
-async def post_by_key(request: Request, post_uuid:uuid.UUID, session:AsyncSession = Depends(get_session)):
-    """
-        get particular post by uuid
-    """
-    statement = select(Post) \
-    .options(selectinload(Post.author)) \
-    .where(
-        Post.key == post_uuid
-    )
-    result = await session.execute(statement)
-    post = result.scalar_one_or_none()
-    if post is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Post not found"
-        )
-    context = {
-        "post": post,
-        "title": post.title[:20]
-    }
-    return templates.TemplateResponse(
-        request=request,
-        name="post.html",
-        context=context
-    )
 
 
-@account_router.get("/users/{user_key}/posts", include_in_schema=False, name='user_posts')
+
+@account_html_router.get("/{user_key}/posts", include_in_schema=False, name='user_posts')
 async def user_post_page(request: Request, user_key:uuid.UUID, session:AsyncSession =  Depends(get_session)):
     """
         particular post of user
@@ -151,7 +257,7 @@ async def user_post_page(request: Request, user_key:uuid.UUID, session:AsyncSess
         context=context
     )
 
-@account_router.get("/api/users/{user_key}/posts")
+@account_router.get("/{user_key}/posts")
 async def user_post_page(user_uuid:uuid.UUID, session:AsyncSession =  Depends(get_session)):
     """
         all post of user
@@ -161,25 +267,30 @@ async def user_post_page(user_uuid:uuid.UUID, session:AsyncSession =  Depends(ge
     return posts
 
 
-@account_router.post("/api/posts", status_code=status.HTTP_201_CREATED, response_model=PostResponse)
-async def create_post(data: PostCreate, session: AsyncSession = Depends(get_session)):
-    return await post_service.CreatePost(data, session)
-
-@account_router.get("/api/posts/{post_uid}", status_code=status.HTTP_200_OK, response_model=PostResponse)
-async def fetch_post_by_post_uid(post_uid: uuid.UUID, session: AsyncSession = Depends(get_session)):
-    return await post_service.fetch_post_by_uid(post_uid, session)
-
-
-@account_router.put("/api/posts/{post_uid}", status_code=status.HTTP_200_OK, response_model=PostResponse)
-async def update_post_full(post_uid: uuid.UUID, data: PostCreate, session: AsyncSession = Depends(get_session)):
-    return await post_service.full_update_post_by_uid(post_uid = post_uid, session=session, data=data)
+@account_router.get("/refresh-token")
+async def get_new_access_token(token_detauils: dict= Depends(RefreshTokenBearer()), session: AsyncSession = Depends(get_session)):
+  
+    user_uuid = token_detauils['user']['sub']
+    user = await user_service.fetch_user_by_email_or_uuid(key=user_uuid, session=session)
+    access_token_detail = create_access_token(user)
+    return {
+        "access_token_detail": access_token_detail
+    }
 
 
-@account_router.patch("/api/posts/{post_uid}", status_code=status.HTTP_200_OK, response_model=PostResponse)
-async def update_post_patch(post_uid: uuid.UUID, data: PostUpdate, session: AsyncSession = Depends(get_session)):
-    return await post_service.update_post_patch(post_uid, data, session)
+@account_router.get("/logout")
+async def revoke_token(token_detail: dict =Depends(access_token_bearer)):
+    jti = token_detail.get("jti")
+    await add_jti_to_blocklist(jti)
 
+    response = JSONResponse(
+        content={
+            "message": "logout success"
+        }
+    )
 
-@account_router.delete("/api/posts/{post_uid}", status_code=status.HTTP_204_NO_CONTENT)
-async def update_post_patch(post_uid: uuid.UUID, session: AsyncSession = Depends(get_session)):
-    return await post_service.delete_posts(post_uid, session)
+    response.delete_cookie(
+        key="refresh_token"
+    )
+
+    return response

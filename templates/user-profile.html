@@ -1,0 +1,200 @@
+{% extends 'layout.html' %}
+
+{% block title %}
+{{ title }}
+{% endblock title %}
+
+{% block content %}
+
+<div class="container py-5">
+
+    <div class="row justify-content-center">
+
+        <div class="col-lg-6">
+
+            <div class="card shadow border-0">
+
+                <div class="card-body text-center p-5">
+
+                    <!-- Profile Image -->
+                    <div class="mb-4 position-relative">
+
+                        <img
+                            id="profilePreview"
+                            src="{{ user.image_path }}"
+                            alt="{{ user.email }}"
+                            class="rounded-circle border shadow object-fit-cover"
+                            width="160"
+                            height="160"
+                            style="cursor:pointer;"
+                        >
+
+                        <!-- Hidden File Input -->
+                        <input
+                            type="file"
+                            id="profileImageInput"
+                            accept="image/*"
+                            class="d-none"
+                        >
+
+                    </div>
+
+                    <!-- User Info -->
+                    <h3 class="fw-bold mb-1">
+                        {{ user.email }}
+                    </h3>
+
+                    <p class="text-muted">
+                        {{ user.user_role.value }}
+                    </p>
+
+                    <!-- Status -->
+                    <div class="mb-3">
+
+                        {% if user.is_verified %}
+
+                            <span class="badge bg-success">
+                                Verified
+                            </span>
+
+                        {% else %}
+
+                            <span class="badge bg-warning text-dark">
+                                Not Verified
+                            </span>
+
+                        {% endif %}
+
+                    </div>
+
+                    <!-- Upload Button -->
+                    <button
+                        id="changePhotoBtn"
+                        class="btn btn-primary"
+                    >
+                        Change Profile Photo
+                    </button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock content %}
+
+{% block js %}
+
+<script>
+
+const profileInput =
+document.getElementById(
+    "profileImageInput"
+);
+
+const profilePreview =
+document.getElementById(
+    "profilePreview"
+);
+
+const changePhotoBtn =
+document.getElementById(
+    "changePhotoBtn"
+);
+
+// open file picker
+changePhotoBtn.addEventListener(
+    "click",
+    () => {
+
+        profileInput.click();
+
+    }
+);
+
+// click image also opens picker
+profilePreview.addEventListener(
+    "click",
+    () => {
+
+        profileInput.click();
+
+    }
+);
+
+// upload image
+profileInput.addEventListener(
+    "change",
+    async (e) => {
+
+    const file =
+        e.target.files[0];
+
+    if (!file) {
+        return;
+    }
+
+    // preview image instantly
+    profilePreview.src =
+        URL.createObjectURL(file);
+
+    const formData =
+        new FormData();
+
+    formData.append(
+        "image_file",
+        file
+    );
+
+    try {
+
+        const response =
+            await fetch(
+                "{{url_for('update-user-image')}}",
+            {
+
+            method: "PATCH",
+
+            body: formData,
+
+            credentials: "include"
+
+        });
+
+        const data =
+            await response.json();
+
+        if (!response.ok) {
+
+            alert(
+                data.detail ||
+                "Upload failed"
+            );
+
+            return;
+        }
+
+        profilePreview.src =
+            data.image_path;
+
+        alert(
+            "Profile updated"
+        );
+
+    } catch (error) {
+
+        console.error(error);
+
+        alert("Server error");
+
+    }
+
+});
+
+</script>
+
+{% endblock js %}
