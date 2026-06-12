@@ -1,10 +1,14 @@
 from fastapi import FastAPI, Request, status, Depends
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from src.accounts.routs import account_router, account_html_router
 from src.post_app.routes import post_router, post_html_router
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.ext.asyncio import AsyncSession
+from src.db.database import get_session
+from sqlalchemy import text
 from contextlib import asynccontextmanager
 from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
 from src.db.database import engine
@@ -35,6 +39,26 @@ app.include_router(account_html_router, tags=['account'], prefix='/users')
 app.include_router(post_router, tags=['post'], prefix='/api/posts')
 app.include_router(post_html_router, tags=['post'])
 
+
+@app.get("/health")
+async def health(
+    session: AsyncSession = Depends(get_session)
+):
+    try:
+        await session.execute(text("SELECT 1"))
+        return JSONResponse(
+            content="connected",
+            status_code=status.HTTP_200_OK
+        )
+
+    except Exception:
+        raise StarletteHTTPException(
+            status_code=503,
+            detail={
+                "status": "unhealthy",
+                "database": "disconnected"
+            }
+        )
 
 
 @app.exception_handler(StarletteHTTPException)
