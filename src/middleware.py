@@ -5,9 +5,31 @@ from src.accounts.models import User
 from src.accounts.utils import JWT_TOKEN
 from src.db.database import async_session
 import uuid
-
-
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 def register_middleware(app: FastAPI):
+
+
+    app.add_middleware(
+        CORSMiddleware, 
+        # allow_origins = ["*"],
+        allow_origins = ["http://begining.fun", "https://begining.fun"],
+        allow_methods = ["*"],
+        allow_headers = ['*'],
+        allow_credentials = True
+        )
+    
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts = [
+            "begining.fun", 
+            "www.begining.fun", 
+            "168.144.185.166",
+            "localhost",
+            "127.0.0.1"
+            ]
+    )
+
     @app.middleware("http")
     async def inject_user(
         request: Request,
