@@ -7,6 +7,7 @@ from src.db.database import async_session
 import uuid
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+
 def register_middleware(app: FastAPI):
 
 
@@ -29,6 +30,40 @@ def register_middleware(app: FastAPI):
             "127.0.0.1"
             ]
     )
+
+    @app.middleware("http")
+    async def add_security_headers(request: Request, call_next):
+        response = await call_next(request)
+        
+        # Prevent Clickjacking (Deny putting your API/UI inside an <iframe>)
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        
+        # Prevent MIME type sniffing
+        response.headers["X-Content-Type-Options"] = "nosniff"
+
+
+        # Enforce HTTPS (Max-age: 1 year). Cloud Run terminates SSL, but this enforces browser HTTPS.
+        if request.url.hostname not in ("localhost", "127.0.0.1"):
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+        
+        # Prevent XSS via Content Security Policy (Adjust based on your UI needs)
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " 
+            "img-src 'self' data: https://fastapi.tiangolo.com;"
+        )
+        
+        if "Referrer-Policy" not in response.headers:
+            # Protect cross-origin referrer data
+            response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        
+        # Control browser feature access
+        response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=()"
+        
+        return response
+
+
 
     @app.middleware("http")
     async def inject_user(
